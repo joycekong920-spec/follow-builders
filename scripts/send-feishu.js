@@ -106,7 +106,7 @@ async function summarizeInChinese(items) {
         {
           role: "system",
           content:
-            "你是一名中文AI资讯编辑。只依据提供的公开素材整理，不补充未经证实的信息。输出必须是纯JSON数组，不要Markdown代码围栏。每项必须包含id、title、summary、whyImportant、practicalUse。title不超过24个汉字；summary用2至3句通俗中文；whyImportant用1句；practicalUse用1句，面向非技术学习者以及进出口、供应链、物流工作者。如果内容与工作没有直接关系，就说明它对AI学习的用途。"
+            "你是一名中文AI资讯编辑。只依据提供的公开素材整理，不补充未经证实的信息。输出必须是纯JSON数组，不要Markdown代码围栏。每项必须包含id、title、summary、whyImportant、practicalUse、nextAction。title不超过24个汉字；summary用2至3句通俗中文；whyImportant用1句；practicalUse用1句，面向非技术学习者以及进出口、供应链、物流工作者；nextAction给出一个简单、可执行的下一步。如果内容与工作没有直接关系，就说明它对AI学习的用途。"
         },
         {
           role: "user",
