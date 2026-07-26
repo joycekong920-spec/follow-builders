@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      models: read
 
     steps:
       - name: 读取仓库
@@ -21,8 +22,9 @@ jobs:
         with:
           node-version: '20'
 
-      - name: 发送精选内容到飞书
+      - name: 生成中文摘要并发送到飞书
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
           FEISHU_SIGNING_SECRET: ${{ secrets.FEISHU_SIGNING_SECRET }}
         run: node scripts/send-feishu.js
