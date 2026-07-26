@@ -10,8 +10,10 @@ const FEEDS = {
 
 const webhook = process.env.FEISHU_WEBHOOK;
 const secret = process.env.FEISHU_SIGNING_SECRET;
+const githubToken = process.env.GITHUB_TOKEN;
 
 if (!webhook || !secret) throw new Error("Missing Feishu secrets");
+if (!githubToken) throw new Error("Missing GITHUB_TOKEN");
 
 const clean = (value = "") =>
   value
@@ -23,7 +25,7 @@ const clean = (value = "") =>
     .replace(/\s+/g, " ")
     .trim();
 
-const excerpt = (value, max = 360) => {
+const excerpt = (value, max = 1500) => {
   const text = clean(value);
   return text.length <= max ? text : text.slice(0, max - 1).trimEnd() + "…";
 };
@@ -39,6 +41,7 @@ function pickItems(feedX, feedPodcasts, feedBlogs) {
     .flatMap((builder) =>
       (builder.tweets || []).map((tweet) => ({
         type: "X 动态",
+        source: `@${builder.handle || builder.name}`,
         title: `@${builder.handle || builder.name}`,
         body: tweet.text,
         url: tweet.url,
@@ -52,6 +55,7 @@ function pickItems(feedX, feedPodcasts, feedBlogs) {
   const blogs = (feedBlogs.blogs || [])
     .map((post) => ({
       type: "文章",
+      source: post.name || "博客",
       title: post.title || post.name,
       body: post.description || post.content,
       url: post.url,
@@ -64,6 +68,7 @@ function pickItems(feedX, feedPodcasts, feedBlogs) {
   const podcasts = (feedPodcasts.podcasts || [])
     .map((episode) => ({
       type: "播客",
+      source: episode.name || "播客",
       title: episode.title || episode.name,
       body: episode.transcript,
       url: episode.url,
@@ -74,6 +79,60 @@ function pickItems(feedX, feedPodcasts, feedBlogs) {
     .slice(0, 1);
 
   return [...tweets, ...blogs, ...podcasts];
+}
+
+async function summarizeInChinese(items) {
+  const input = items.map((item, index) => ({
+    id: index + 1,
+    type: item.type,
+    source: item.source,
+    originalTitle: item.title,
+    content: excerpt(item.body)
+  }));
+
+  const response = await fetch("https://models.github.ai/inference/chat/completions", {
+    method: "POST",
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "Authorization": `Bearer ${githubToken}`,
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    body: JSON.stringify({
+      model: "openai/gpt-4o",
+      temperature: 0.2,
+      max_tokens: 2200,
+      messages: [
+        {
+          role: "system",
+          content:
+            "你是一名中文AI资讯编辑。只依据提供的公开素材整理，不补充未经证实的信息。输出必须是纯JSON数组，不要Markdown代码围栏。每项必须包含id、title、summary、whyImportant、practicalUse。title不超过24个汉字；summary用2至3句通俗中文；whyImportant用1句；practicalUse用1句，面向非技术学习者以及进出口、供应链、物流工作者。如果内容与工作没有直接关系，就说明它对AI学习的用途。"
+        },
+        {
+          role: "user",
+          content: JSON.stringify(input)
+        }
+      ]
+    })
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(`GitHub Models request failed: ${JSON.stringify(result)}`);
+  }
+
+  const raw = result.choices?.[0]?.message?.content || "";
+  const jsonText = raw.replace(/^\s*```(?:json)?/i, "").replace(/```\s*$/i, "").trim();
+  const summaries = JSON.parse(jsonText);
+
+  if (!Array.isArray(summaries) || summaries.length !== items.length) {
+    throw new Error("GitHub Models returned an unexpected summary format");
+  }
+
+  return items.map((item, index) => ({
+    ...item,
+    chinese: summaries.find((entry) => Number(entry.id) === index + 1) || summaries[index]
+  }));
 }
 
 function signedPayload(message) {
@@ -97,6 +156,14 @@ async function send(message) {
 }
 
 function itemCard(item, index, total, date) {
+  const info = item.chinese;
+  const body =
+    `**${info.title}**\n\n` +
+    `**核心内容：** ${info.summary}\n\n` +
+    `**为什么值得关注：** ${info.whyImportant}\n\n` +
+    `**对你的用途：** ${info.practicalUse}\n\n` +
+    `来源：${item.source}`;
+
   return {
     msg_type: "interactive",
     card: {
@@ -106,13 +173,7 @@ function itemCard(item, index, total, date) {
         title: { tag: "plain_text", content: `AI 日报精选 ${index}/${total} · ${item.type}` }
       },
       elements: [
-        {
-          tag: "div",
-          text: {
-            tag: "lark_md",
-            content: `**${item.title}**\n\n${excerpt(item.body) || "点击下方按钮查看原文。"}`
-          }
-        },
+        { tag: "div", text: { tag: "lark_md", content: body } },
         {
           tag: "note",
           elements: [
@@ -142,7 +203,8 @@ async function main() {
     fetchJson(FEEDS.blogs)
   ]);
 
-  const items = pickItems(feedX, feedPodcasts, feedBlogs);
+  const selected = pickItems(feedX, feedPodcasts, feedBlogs);
+  const items = await summarizeInChinese(selected);
   const date = new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
     year: "numeric",
@@ -165,7 +227,7 @@ async function main() {
     }
   }
 
-  console.log(`Sent ${items.length} items to Feishu.`);
+  console.log(`Sent ${items.length} Chinese items to Feishu.`);
 }
 
 main().catch((error) => {
