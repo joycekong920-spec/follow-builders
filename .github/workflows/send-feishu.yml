@@ -1,0 +1,28 @@
+name: 飞书 AI 日报
+
+on:
+  schedule:
+    # 北京时间每天 08:00（UTC 00:00）
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  send-to-feishu:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: 读取仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 发送精选内容到飞书
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          FEISHU_SIGNING_SECRET: ${{ secrets.FEISHU_SIGNING_SECRET }}
+        run: node scripts/send-feishu.js
