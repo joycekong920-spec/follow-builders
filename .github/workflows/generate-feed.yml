@@ -2,8 +2,12 @@ name: Generate Feeds
 
 on:
   schedule:
-    # All feeds (tweets, podcasts, blogs): once daily at 6:17am UTC
-    - cron: '17 6 * * *'
+    # Daily at 8:00am Beijing time (00:00 UTC).
+    - cron: '0 0 * * *'
+  push:
+    paths:
+      - '.github/workflows/generate-feed.yml'
+      - 'scripts/send-feishu-digest.js'
   workflow_dispatch:
     inputs:
       mode:
@@ -22,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      models: read
 
     steps:
       - uses: actions/checkout@v4
@@ -51,3 +56,10 @@ jobs:
           git add feed-x.json feed-podcasts.json feed-blogs.json state-feed.json
           git diff --cached --quiet || git commit -m "chore: update feeds [skip ci]"
           git push
+
+      - name: Build Chinese digest and send to Feishu
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK || secrets.FEISHU_WEBHOOK_URL || secrets.FEISHU_BOT_WEBHOOK }}
+          FEISHU_SIGNING_SECRET: ${{ secrets.FEISHU_SIGNING_SECRET }}
+        run: node scripts/send-feishu-digest.js
