@@ -2,8 +2,13 @@ name: 飞书 AI 日报
 
 on:
   schedule:
-    # 北京时间每天 08:00（UTC 00:00）
-    - cron: '0 0 * * *'
+    # 07:57 Beijing time. Starting away from the top of the UTC hour avoids
+    # GitHub Actions' busiest scheduling window; delivery normally lands near 08:00.
+    - cron: '57 23 * * *'
+  push:
+    paths:
+      - '.github/workflows/send-feishu.yml'
+      - 'scripts/send-feishu-digest.js'
   workflow_dispatch:
 
 jobs:
@@ -20,11 +25,11 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
-      - name: 生成中文摘要并发送到飞书
+      - name: 筛选高价值内容并发送到飞书
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK || secrets.FEISHU_WEBHOOK_URL || secrets.FEISHU_BOT_WEBHOOK }}
           FEISHU_SIGNING_SECRET: ${{ secrets.FEISHU_SIGNING_SECRET }}
-        run: node scripts/send-feishu.js
+        run: node scripts/send-feishu-digest.js
