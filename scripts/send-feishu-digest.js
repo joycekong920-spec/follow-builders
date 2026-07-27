@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
 import crypto from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 
 const MODEL_URL = 'https://models.github.ai/inference/chat/completions';
+const FEED_X_URL = 'https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/feed-x.json';
 const MODEL = process.env.GITHUB_MODEL || 'openai/gpt-4o-mini';
 const MAX_ITEMS = 8;
 
@@ -31,12 +30,12 @@ function isLowInformation(tweet) {
   return false;
 }
 
-async function readJson(file) {
-  return JSON.parse(await readFile(resolve(process.cwd(), file), 'utf8'));
-}
-
 async function loadCandidates() {
-  const feed = await readJson('feed-x.json');
+  const response = await fetch(FEED_X_URL);
+  if (!response.ok) {
+    throw new Error(`Could not fetch the central X feed (${response.status}).`);
+  }
+  const feed = await response.json();
   const candidates = [];
 
   for (const author of feed.x || []) {
