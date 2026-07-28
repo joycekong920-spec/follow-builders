@@ -2,14 +2,15 @@ name: 飞书 AI 日报
 
 on:
   schedule:
-    # 07:57 Beijing time. Starting away from the top of the UTC hour avoids
-    # GitHub Actions' busiest scheduling window; delivery normally lands near 08:00.
-    - cron: '57 23 * * *'
-  push:
-    paths:
-      - '.github/workflows/send-feishu.yml'
-      - 'scripts/send-feishu-digest.js'
+    # 北京时间约 07:37 首次运行；避开 GitHub Actions 的整点拥堵。
+    - cron: '37 23 * * *'
+    # 北京时间约 08:27 补偿运行；当天首次发送成功后会自动跳过。
+    - cron: '27 0 * * *'
   workflow_dispatch:
+
+concurrency:
+  group: feishu-digest
+  cancel-in-progress: false
 
 jobs:
   send-to-feishu:
@@ -22,14 +23,41 @@ jobs:
       - name: 读取仓库
         uses: actions/checkout@v4
 
+      - name: 计算北京时间日期
+        id: beijing-date
+        shell: bash
+        run: echo "date=$(TZ=Asia/Shanghai date +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: 检查今天是否已经发送
+        if: github.event_name == 'schedule'
+        id: daily-sent
+        uses: actions/cache/restore@v4
+        with:
+          path: .feishu-digest-sent
+          key: feishu-digest-${{ steps.beijing-date.outputs.date }}
+
       - name: 安装 Node.js
+        if: github.event_name != 'schedule' || steps.daily-sent.outputs.cache-hit != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '24'
 
       - name: 筛选高价值内容并发送到飞书
+        if: github.event_name != 'schedule' || steps.daily-sent.outputs.cache-hit != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK || secrets.FEISHU_WEBHOOK_URL || secrets.FEISHU_BOT_WEBHOOK }}
           FEISHU_SIGNING_SECRET: ${{ secrets.FEISHU_SIGNING_SECRET }}
         run: node scripts/send-feishu-digest.js
+
+      - name: 记录今天已成功发送
+        if: success() && github.event_name == 'schedule' && steps.daily-sent.outputs.cache-hit != 'true'
+        shell: bash
+        run: touch .feishu-digest-sent
+
+      - name: 保存今天的发送记录
+        if: success() && github.event_name == 'schedule' && steps.daily-sent.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .feishu-digest-sent
+          key: feishu-digest-${{ steps.beijing-date.outputs.date }}
