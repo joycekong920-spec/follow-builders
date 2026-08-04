@@ -175,6 +175,33 @@ ${JSON.stringify(candidates)}`;
   return validateDigest(parseJsonResponse(raw), candidates);
 }
 
+function buildFreeFallbackDigest(candidates) {
+  const items = candidates
+    .slice(0, MAX_ITEMS)
+    .map((item) => ({
+      name: item.name || 'AI 博主',
+      identity: item.identity_source || 'AI 行业从业者',
+      title: `${item.name || 'AI 博主'} 的最新观点`,
+      core: cleanText(item.text, 220),
+      save_reason: '这是按互动度和信息量筛选出的原始观点，保留链接便于核实详情。',
+      work_value: '可用于跟踪 AI 工具与行业趋势，判断是否能用于进出口、供应链或日常自动化。',
+      next_action: '打开原帖核对上下文；有价值时在飞书中收藏。',
+      learning_status: '待阅读',
+      url: item.url,
+    }))
+    .filter((item) => item.name && item.core && item.url);
+
+  if (items.length === 0) {
+    throw new Error('No items are available for the free fallback digest.');
+  }
+
+  return {
+    mode: 'fallback',
+    overview: '免费 AI 摘要暂时不可用，已自动切换为高信息量原帖备用推送。',
+    items,
+  };
+}
+
 function beijingDate() {
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -188,7 +215,7 @@ function buildCard(digest) {
   const elements = [
     {
       tag: 'markdown',
-      content: `**今日主题：** ${digest.overview}\n\n已自动过滤闲聊、自拍、纯转发和无信息量内容。`,
+      content: `**今日主题：** ${digest.overview}\n\n已自动过滤闲聊、自拍、纯转发和无信息量内容。${digest.mode === 'fallback' ? '\n\n⚠️ 免费 AI 摘要当前不可用，以下保留筛选后的原文与原帖链接，日报发送未中断。' : ''}`,
     },
   ];
 
@@ -301,10 +328,21 @@ async function main() {
     throw new Error('No high-value candidate posts found in feed-x.json.');
   }
 
-  const digest = await summarizeWithGitHubModels(candidates);
+  let digest;
+  try {
+    digest = await summarizeWithGitHubModels(candidates);
+  } catch (error) {
+    console.warn(
+      `AI summary unavailable; switching to the free fallback: ${error.message}`,
+    );
+    digest = buildFreeFallbackDigest(candidates);
+  }
+
   const card = buildCard(digest);
   await sendToFeishu(card);
-  console.log(`Sent ${digest.items.length} high-value items to Feishu.`);
+  console.log(
+    `Sent ${digest.items.length} high-value items to Feishu (${digest.mode || 'ai'} mode).`,
+  );
 }
 
 main().catch((error) => {
