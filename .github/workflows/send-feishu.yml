@@ -1,13 +1,6 @@
 name: 飞书 AI 日报
 
 on:
-  # 修改日报脚本或工作流时自动做一次真实发送测试。
-  push:
-    branches:
-      - main
-    paths:
-      - scripts/send-feishu-digest.js
-      - .github/workflows/send-feishu.yml
   schedule:
     # 北京时间约 07:37 首次运行；避开 GitHub Actions 的整点拥堵。
     - cron: '37 23 * * *'
