@@ -17,6 +17,10 @@ concurrency:
   group: feishu-digest
   cancel-in-progress: false
 
+# 备用方案已在这一天真实发送测试；当天后续补偿运行跳过，防止重复。
+env:
+  TEST_SENT_BEIJING_DATE: '2026-08-04'
+
 jobs:
   send-to-feishu:
     runs-on: ubuntu-latest
@@ -42,13 +46,13 @@ jobs:
           key: feishu-digest-${{ steps.beijing-date.outputs.date }}
 
       - name: 安装 Node.js
-        if: github.event_name != 'schedule' || steps.daily-sent.outputs.cache-hit != 'true'
+        if: github.event_name != 'schedule' || (steps.beijing-date.outputs.date != env.TEST_SENT_BEIJING_DATE && steps.daily-sent.outputs.cache-hit != 'true')
         uses: actions/setup-node@v4
         with:
           node-version: '24'
 
       - name: 筛选高价值内容并发送到飞书（含免费备用）
-        if: github.event_name != 'schedule' || steps.daily-sent.outputs.cache-hit != 'true'
+        if: github.event_name != 'schedule' || (steps.beijing-date.outputs.date != env.TEST_SENT_BEIJING_DATE && steps.daily-sent.outputs.cache-hit != 'true')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK || secrets.FEISHU_WEBHOOK_URL || secrets.FEISHU_BOT_WEBHOOK }}
